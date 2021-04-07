@@ -18,11 +18,19 @@ function updatedb(id, codId) {
   db.set(id, codId);
 }
 
-function deletedb(id){
-  db.delete(id).then(() => {
-  });
+function deletedb(id) {
+  db.delete(id).then(() => {});
 }
 
+function prettier(msm) {
+  msm = msm.replace(/\>/g, " ");
+  msm = msm.replace(/\</g, "");
+  msm = msm.replace(/\>/g, "");
+  msm = msm.replace(/\@/g, "");
+  msm = msm.replace(/\!/g, "");
+  msm = msm.replace(/ +(?= )/g, "");
+  return msm;
+}
 
 // ================= START BOT CODE ===================
 const Discord = require("discord.js");
@@ -32,30 +40,35 @@ client.on("ready", () => {
   console.log(`Logged in as ${client.user.tag}!`);
 });
 
-client.on("message",async (msg) => {
+client.on("message", async (msg) => {
   console.log(msg.content);
 
-  if (msg.content.startsWith("$user")){
-    message = msg.content.split(" ");
-    db.get(message[1]).then(value => {
+  if (msg.content.toLowerCase().startsWith("user")) {
+    msm = prettier(msg.content.toLowerCase().trim());
+    message = msm.split(" ");
+    db.get(message[1]).then((value) => {
       msg.channel.send(value);
-    })
-  }  
+    });
+  }
 
-  if (msg.content.startsWith("$kd")){
-    message = msg.content.split(" ");
-    if(!message[1]){
-      msg.reply("HPTA TONTO")
-    }else{
-      db.get(message[1]).then(value => {
-        var id = "";
-        if(value){
-          id = value; 
-        }else{
+  if (msg.content.toLowerCase().startsWith("kd")) {
+    var id = "";
+    msm = prettier(msg.content.toLowerCase().trim());
+    message = msm.split(" ");
+    if (message[1] === "me") {
+      message[1] = msg.author.id;
+    }
+    if (!message[1]) {
+      msg.reply("HPTA TONTO");
+    } else {
+      db.get(message[1]).then((value) => {
+        if (value) {
+          id = value;
+        } else {
           id = message[1];
         }
         (() => {
-          console.log(id)
+          console.log(id);
           id = id.replace(/\s/g, "");
           id = id.replace(/\#/g, "%23");
           console.log(id);
@@ -64,68 +77,126 @@ client.on("message",async (msg) => {
             id,
             "/overview",
           ].join("");
-          
+          console.log(url);
+
           const customHeaderRequest = request.defaults({
             headers: {
               "User-Agent":
                 "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Safari/537.36",
             },
           });
-          
+
           //const names = ["Wins", "Top 5", "K/D", "Damage/game"]
           customHeaderRequest.get(url, function (err, resp, body) {
             if (err) {
               console.log(err);
             }
             $ = cheerio.load(body);
-            let data = new Array(); 
-          
-            $(".giant-stats .stat").each((i,elem) => {
+            let data = new Array();
+
+            $(".main .stat").each((i, elem) => {
               data.push($(elem).find(".value").text());
             });
-            try{
-              msg.channel.send(data[2])
-            }
-            catch{
-              msg.channel.send("HPTA HAY UN BUG")
+            if (data[18]) {
+              msg.channel.send(data[18]);
+            } else {
+              msg.channel.send("HPTA HAY UN BUG");
             }
           });
-          })();
-      })
+        })();
+      });
     }
   }
 
-  
-  if (msg.content.startsWith("$new")) {
-    message = msg.content.split(" ");
-    if(!message[1] || !message[2]){
+  if (msg.content.toLowerCase().startsWith("new")) {
+    msm = prettier(msg.content.toLowerCase().trim());
+    message = msm.split(" ");
+    if (!message[1] || !message[2]) {
       msg.reply("HPTA TONTO");
-      msg.reply("$new id idCodTraker")
-    }else{
-      console.log("entro")
+      msg.reply("$new @NickName(discord) idCodTraker#");
+    } else {
+      msg.channel.send("Registrado con Exito");
       updatedb(message[1], message[2]);
     }
   }
 
-  if (msg.content.startsWith("$del")){
+  if (msg.content.toLowerCase().startsWith("del")) {
+    //msm = prettier(msg.content.toLowerCase().trim());
     message = msg.content.split(" ");
+    console.log(message);
     deletedb(message[1]);
   }
-  //if (msg.content === "$list") {
-  //  db.list().then(keys. => {
-  //    console.log(elem)
-  //    db.get(elem).then(value => {
-  //      console.log(value)
-  //      try{
-  //        msg.channel.send(elem + " " + value);
-  //      }
-  //      catch{
-  //        msg.channel.send("HPTA UN BUG");
-  //      }
-  //    });
-  //    
-  //  });
-  //}
+  if (msg.content.startsWith("get")) {
+    message = msg.content.split(" ");
+    db.get(message[1]).then((value) => {
+      console.log(value);
+      msg.channel.send(value);
+    });
+  }
+  if (msg.content === "list") {
+    db.list().then((keys) => {
+      console.log(typeof keys);
+      console.log(keys);
+      console.log(keys[0]);
+      for (const [key, value] of Object.entries(keys)) {
+        db.get(value).then((value) => {
+          msg.channel.send(value);
+        });
+        console.log(`${key}: ${value}`);
+      }
+    });
+  }
+
+  if (msg.content === "top") {
+    db.list().then((keys) => {
+      let kd = [];
+      for (const [key, value] of Object.entries(keys)) {
+        db.get(value).then((value) => {
+          (async () => {
+            id = value;
+            id = id.replace(/\s/g, "");
+            id = id.replace(/\#/g, "%23");
+            const url = [
+              "https://cod.tracker.gg/warzone/profile/atvi/",
+              id,
+              "/overview",
+            ].join("");
+
+            const customHeaderRequest = request.defaults({
+              headers: {
+                "User-Agent":
+                  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Safari/537.36",
+              },
+            });
+
+            //const names = ["Wins", "Top 5", "K/D", "Damage/game"]
+            customHeaderRequest.get(
+              url,
+              await function (err, resp, body) {
+                if (err) {
+                  console.log(err);
+                }
+                $ = cheerio.load(body);
+                let data = new Array();
+
+                $(".main .stat").each((i, elem) => {
+                  data.push($(elem).find(".value").text());
+                });
+                if (data[18]) {
+                  msg.channel.send(`${value}: ${data[18]}`);
+                  kd.push(data[18]);
+                } else {
+                  msg.channel.send("HPTA HAY UN BUG");
+                }
+              }
+            );
+            console.log(kd);
+          })();
+        });
+      }
+      console.log(kd);
+    });
+  }
 });
 
 console.log(process.env.DISCORD_TOKEN);

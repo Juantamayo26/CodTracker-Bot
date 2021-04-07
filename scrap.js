@@ -24,13 +24,13 @@ customHeaderRequest.get(url, function (err, resp, body) {
     console.log(err);
   }
   $ = cheerio.load(body);
-  let data = new Array(); 
+  let data = new Array();
 
-  $(".giant-stats .stat").each((i,elem) => {
+  $(".main .stat").each((i, elem) => {
     data.push($(elem).find(".value").text());
     //data.push({
     //  data: $(elem).find(".value").text(),
     //});
   });
-  console.log(data);
+  console.log(data[18]);
 });
