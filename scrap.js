@@ -8,7 +8,7 @@ console.log(id);
 const url = [
   "https://cod.tracker.gg/warzone/profile/atvi/",
   id,
-  "/overview",
+  "/detailed",
 ].join("");
 
 const customHeaderRequest = request.defaults({
@@ -32,5 +32,5 @@ customHeaderRequest.get(url, function (err, resp, body) {
     //  data: $(elem).find(".value").text(),
     //});
   });
-  console.log(data[18]);
+  console.log(data);
 });
