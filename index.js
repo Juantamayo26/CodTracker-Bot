@@ -65,7 +65,7 @@ const client = new Discord.Client();
 client.on("ready", () => {
   console.log(`Logged in as ${client.user.tag}!`);
   let db = new sqlite.Database('./db/users.db', sqlite.OPEN_READWRITE | sqlite.OPEN_CREATE);
-  db.run(`CREATE TABLE IF NOT EXISTS user(userid TEXT NOT NULL, usercod TEXT NOT NULL)`)
+  db.run(`CREATE TABLE IF NOT EXISTS user(userid INTEGER NOT NULL, usercod TEXT NOT NULL)`)
 });
 
 
