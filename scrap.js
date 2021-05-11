@@ -4,11 +4,11 @@ const cheerio = require("cheerio");
 var id = "ByPiglet #2087417";
 id = id.replace(/\s/g, "");
 id = id.replace(/\#/g, "%23");
-console.log(id);
+
 const url = [
   "https://cod.tracker.gg/warzone/profile/atvi/",
   id,
-  "/detailed",
+  "/matches",
 ].join("");
 
 const customHeaderRequest = request.defaults({
@@ -18,19 +18,22 @@ const customHeaderRequest = request.defaults({
   },
 });
 
-//const names = ["Wins", "Top 5", "K/D", "Damage/game"]
-customHeaderRequest.get(url, function (err, resp, body) {
-  if (err) {
-    console.log(err);
-  }
-  $ = cheerio.load(body);
-  let data = new Array();
-
-  $(".main .stat").each((i, elem) => {
-    data.push($(elem).find(".value").text());
-    //data.push({
-    //  data: $(elem).find(".value").text(),
-    //});
+const getData = () =>
+  new Promise((resolve, reject) => {
+    customHeaderRequest.get(url, async function (err, resp, body) {
+      if (err) {
+        reject(err);
+      }
+      let data = new Array();
+      $ = cheerio.load(body);
+      setTimeout(function () {
+        $(".session-header").each((i, elem) => {
+          console.log("HOLA");
+          data.push($(elem).find(".session-header__value").text());
+        });
+        resolve(data);
+      }, 2000);
+    });
   });
-  console.log(data);
-});
+
+getData().then((data) => console.log(data));

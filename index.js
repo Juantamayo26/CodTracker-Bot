@@ -1,43 +1,51 @@
-require("dotenv").config();
-
-const Discord = require("discord.js");
-const express = require("express");
-const request = require("request");
-const cheerio = require("cheerio");
-const Database = require("@replit/database");
 const codAPI = require('call-of-duty-api')();
-
-const app = express();
-const db = new Database();
-
+require("dotenv").config();
+const Discord = require("discord.js");
+const sqlite = require('sqlite3').verbose();
 
 // CONFIG
 const token = process.env.TOKEN;
 const prefix = "";
 const COD_USERNAME = process.env.COD_USERNAME;
 const COD_PASSWORD = process.env.COD_PASSWORD;
-const port = 3000;
 
-const customHeaderRequest = request.defaults({
-  headers: {
-    "User-Agent":
-      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Safari/537.36",
-  },
-});
-
-
-
-app.get("/", (req, res) => res.send("Hello World!"));
-
-app.listen(port, () =>
-  console.log(`Example app listening at http://localhost:${port}`)
-);
-
-function deletedb(id) {
-  db.delete(id).then(() => {
-    console.log("YES")
-  });
+function toDateTime(secs) {
+  var t = new Date(Date.UTC(1970, 0, 1)); // Epoch
+  t.setUTCSeconds(secs);
+  return t;
 }
+
+const isToday = (someDate, lastGame) => {
+  return someDate.getDate() == lastGame.getDate() &&
+    someDate.getMonth() == lastGame.getMonth() &&
+    someDate.getFullYear() == lastGame.getFullYear()
+}
+
+async function getData(id){
+  let data = new Object()
+  await codAPI.login(COD_USERNAME, COD_PASSWORD);
+  let data1 = await codAPI.MWBattleData(id, 'acti');
+  let data2 = await codAPI.MWcombatwz(id, 'acti');
+  let kills = 0
+  let deaths = 0
+  const lastGame = toDateTime(data2.matches[0].utcStartSeconds)
+  data2.matches.forEach((i) => {
+    if(isToday(toDateTime(i.utcStartSeconds), lastGame) && i.gameType === 'wz'){
+      kills+= i.playerStats.kills;
+      deaths+= i.playerStats.deaths;
+    }
+  })
+
+  data.wins = data1.br.wins
+  data.kills = data1.br.kills
+  data.timePlayed = (parseFloat(data1.br.timePlayed) / 3600).toFixed(2)+'hrs'
+  data.gamesPlayed = data1.br.gamesPlayed 
+  data.globalKd = data1.br.kdRatio.toFixed(2)
+  data.date1 = lastGame
+  data.dailyKd = (kills/deaths).toFixed(2)
+  return data
+}
+
 
 function prettier(msm) {
   msm = msm.replace(/\>/g, " ");
@@ -50,101 +58,33 @@ function prettier(msm) {
 }
 
 // ================= START BOT CODE ===================
+
+
 const client = new Discord.Client();
 
 client.on("ready", () => {
   console.log(`Logged in as ${client.user.tag}!`);
+  let db = new sqlite.Database('./db/users.db', sqlite.OPEN_READWRITE | sqlite.OPEN_CREATE);
+  db.run(`CREATE TABLE IF NOT EXISTS user(userid TEXT NOT NULL, usercod TEXT NOT NULL)`)
 });
 
-client.on("message", async (message) => {
-  
-  // prevent "botception"
-  if(message.author.bot) return;
 
+client.on("message", async (message) => {
+  if(message.author.bot) return;
   const args = message.content.replace(/ +(?= )/g, "").slice(prefix.length).trim().split(/ +/g);
   const command = args.shift().toLowerCase();
-
-  if (command === "user") {
-    args[0] = prettier(args[0]);
-    db.get(args[0]).then((value) => {
-      if(value){
-        message.channel.send(value);
-      }else{
-        message.channel.send("Couldn't load data.");
-      }
-    });
-  }
+  let db = new sqlite.Database('./db/users.db', sqlite.OPEN_READWRITE);
 
   if (command === "new") {
     if(!args[0]) {message.channel.send('Enter @Username'); return;}
     if(!args[1]) {message.channel.send("Enter wzId"); return;}
     args[0] = prettier(args[0]);
+    let insertdata = db.prepare(`INSERT INTO user VALUES(?,?)`);
+    insertdata.run(args[0], args[1]);
+    insertdata.finalize();
+    db.close();
     message.channel.send("Registrado con Exito");
-    db.set(args[0], args[1]);
-  }
-
-  //if (command === "get") {
-  //  message = msg.content.split(" ");
-  //  db.get(message[1]).then((value) => {
-  //    console.log(value);
-  //    msg.channel.send(value);
-  //  });
-  //}
-
-  //if (command === "list") {
-  //  db.list().then((keys) => {
-  //    console.log(typeof keys);
-  //    console.log(keys);
-  //    console.log(keys[0]);
-  //    for (const [key, value] of Object.entries(keys)) {
-  //      db.get(value).then((value) => {
-  //        msg.channel.send(value);
-  //      });
-  //      console.log(`${key}: ${value}`);
-  //    }
-  //  });
-  //}
-
-  if(command === 'ping') {
-    // Round-trip latency AND average latency between bot and websocket server (one-way)
-    const m = await message.channel.send("Ping?");
-    m.edit(`Pong! Latency is ${m.createdTimestamp - message.createdTimestamp}ms. API Latency is ${Math.round(client.ws.ping)}ms`);
-  }
-
-  // Call of Duty API - Dirty Hack <3
-  if(command === 'cod') {
-  	if(!args[0]) {message.channel.send('Enter a gamertag/player name'); return;}
-  	if(!args[1]) {message.channel.send("Enter a platform (psn, xbl, battle, acti,...)"); return;}
-    const m = await message.channel.send("Loading...");
-    try {
-      await codAPI.login(COD_USERNAME, COD_PASSWORD);
-      let data = await codAPI.MWwz(args[0], args[1]);
-
-      const embed = new Discord.MessageEmbed()
-      .setColor('F6FF33')
-      .setThumbnail('https://d1yjjnpx0p53s8.cloudfront.net/styles/logo-thumbnail/s3/032020/call_of_duty_warzone.jpg')
-      .setTitle('COD Warzone')
-      .setDescription('Battle Royal overview:')
-      //.addField('\u200B', '\u200B')
-      .addField(`> ${args[0]}`, '\u200B', false)
-      .addFields(
-          {name: 'Wins', value: data.lifetime.mode.br.properties.wins, inline: true},
-          {name: 'K/D ratio', value: (data.lifetime.mode.br.properties.kdRatio).toFixed(2), inline: true},
-          {name: 'Time Played', value: (parseFloat(data.lifetime.mode.br.properties.timePlayed) / 3600).toFixed(2) + 'hrs', inline: true},
-          {name: 'Games Played', value: data.lifetime.mode.br.properties.gamesPlayed, inline: true},
-          {name: 'Top 5', value: data.lifetime.mode.br.properties.topFive, inline: true},
-          {name: 'Top 10', value: data.lifetime.mode.br.properties.topTen, inline: true},
-          //{name: 'Kills', value: data.lifetime.mode.br.properties.kills, inline: true},
-          )
-      //.addField('\u200B', '\u200B')
-      //.setFooter("❔ - Type '+help' for more information")
-      message.channel.send(embed);
-      m.delete().catch(console.error);
-    } catch(error) {
-      m.delete().catch(console.error);
-      console.log("error :(")
-      message.channel.send("Couldn't load player data.");
-    }
+    console.log(args[0], args[1])
   }
 
   if(command === 'kd') {
@@ -152,121 +92,59 @@ client.on("message", async (message) => {
     if (args[0] === "me") {
       args[0] = message.author.id;
     }
-    var id = "";
-    db.get(prettier(args[0])).then((value) => {
-      if(value){
-        id = value;
+    let query = `SELECT * FROM user WHERE userid = ?`;
+    db.get(query, [prettier(args[0])], (err, data) => {
+      if(err) console.log(err)
+      if (data === undefined) {
+        console.log('hola')
       }else{
-        id = value = args[0];
-      }
-      (async () => {
-        const m = await message.channel.send("Loading...");
-        try {
-          await codAPI.login(COD_USERNAME, COD_PASSWORD);
-          let data = await codAPI.MWwz(id, 'acti');
-          //message.channel.send((data.lifetime.mode.br.properties.kdRatio).toFixed(2))
+        (async () => {
+          const m = await message.channel.send("Loading...");
+          //console.log(await getData('srios1899#9255577'))
+          const info = await getData(data.usercod)
           const embed = new Discord.MessageEmbed()
           .setColor('F6FF33')
           .setThumbnail('https://d1yjjnpx0p53s8.cloudfront.net/styles/logo-thumbnail/s3/032020/call_of_duty_warzone.jpg')
           .setTitle('COD Warzone')
           .setDescription('Warzone overview:')
-          //.addField('\u201B', '\u200B')
-          .addField(`> ${value}`, '\u200B', false)
+          .addField(`> ${data.usercod}`, '\u200B', false)
           .addFields(
-              {name: 'Wins', value: data.lifetime.mode.br.properties.wins, inline: true},
-              {name: 'K/D ratio', value: (data.lifetime.mode.br.properties.kdRatio).toFixed(2), inline: true},
-              {name: 'Time Played', value: (parseFloat(data.lifetime.mode.br.properties.timePlayed) / 3600).toFixed(2) + 'hrs', inline: true},
-              
-              {name: 'Games Played', value: data.lifetime.mode.br.properties.gamesPlayed, inline: true},
-              {name: 'Top 5', value: data.lifetime.mode.br.properties.topFive, inline: true},
-              {name: 'Top 10', value: data.lifetime.mode.br.properties.topTen, inline: true},
-              //{name: 'Kills', value: data.lifetime.mode.br.properties.kills, inline: true},
-              )
-          //.addField('\u200B', '\u200B')
-          //.setFooter("❔ - Type '+help' for more information")
+            {name: 'Wins', value: info.wins, inline: true},
+            {name: 'Global K/D', value: info.globalKd , inline: true},
+            {name: 'Time Played', value: info.timePlayed, inline: true},
+            
+            {name: 'Games Played', value: info.gamesPlayed, inline: true},
+            {name: 'Daily K/D', value: info.dailyKd, inline: true},
+            {name: 'Kills', value: info.kills, inline: true},
+          )
           message.channel.send(embed);
           m.delete().catch(console.error);
-        } catch(error) {
-          try{
-            id = id.replace(/\s/g, "");
-            id = id.replace(/\#/g, "%23");
-
-            const url = [
-              "https://cod.tracker.gg/warzone/profile/atvi/",
-              id,
-              "/detailed",
-            ].join("");
-
-            customHeaderRequest.get(url, function (err, resp, body) {
-              if (err) {
-                console.log(err);
-              }
-              $ = cheerio.load(body);
-              let data = new Array();
-            
-              $(".main .stat").each((i, elem) => {
-                data.push($(elem).find(".value").text());
-                //data.push({
-                //  data: $(elem).find(".value").text(),
-                //});
-              });
-
-            const embed = new Discord.MessageEmbed()
-            .setColor('F6FF33')
-            .setThumbnail('https://d1yjjnpx0p53s8.cloudfront.net/styles/logo-thumbnail/s3/032020/call_of_duty_warzone.jpg')
-            .setTitle('COD Warzone')
-            .setDescription('Warzone overview:')
-            //.addField('\u201B', '\u200B')
-            .addField(`> ${value}`, '\u200B', false)
-            .addFields(
-                {name: 'Wins', value: data[12], inline: true},
-                {name: 'K/D ratio', value:data[18], inline: true},
-                {name: 'Top 5', value: data[13], inline: true},
-                {name: 'Top 10', value: data[14], inline: true},
-                //{name: 'Kills', value: data.lifetime.mode.br.properties.kills, inline: true},
-                )
-            //.addField('\u200B', '\u200B')
-            //.setFooter("❔ - Type '+help' for more information")
-            message.channel.send(embed);
-            m.delete().catch(console.error);
-            });
-
-          }catch{
-            console.log(error)
-            m.delete().catch(console.error);
-            console.log("error :(")
-            message.channel.send("Couldn't load player data.");
-          }
-        }
-      })();
+        })();
+      }
     })
   }
+})
 
-});
-
-const kdUpgrade = setInterval(async () => {
-  await codAPI.login(COD_USERNAME, COD_PASSWORD)
-  keys = await db.list()
-  keys.forEach(async (i) => {
-    let value = await db.get(i)
-    try{
-      let data = await codAPI.MWwz(value, 'acti');
-      let kdNew = data.lifetime.mode.br.properties.kdRatio.toFixed(2)
-      let kdOld = await db.get(value)
-      if(kdOld == null){
-        console.log("HOLA")
-        await db.set(value, kd)
-      }else if( kdNew != kdOld ){
-        console.log(value)
-        console.log(kdNew)
-        console.log(kdOld)
-      }
-    }catch{
-    }
-  })
-}, 1000 * 60 * 60 * 24)
-
-
-
+//const kdUpgrade = setInterval(async () => {
+//  await codAPI.login(COD_USERNAME, COD_PASSWORD)
+//  keys = await db.list()
+//  keys.forEach(async (i) => {
+//    let value = await db.get(i)
+//    try{
+//      let data = await codAPI.MWwz(value, 'acti');
+//      let kdNew = data.lifetime.mode.br.properties.kdRatio.toFixed(2)
+//      let kdOld = await db.get(value)
+//      if(kdOld == null){
+//        console.log("HOLA")
+//        await db.set(value, kd)
+//      }else if( kdNew != kdOld ){
+//        console.log(value)
+//        console.log(kdNew)
+//        console.log(kdOld)
+//      }
+//    }catch{
+//    }
+//  })
+//}, 1000 * 60 * 60 * 24)
 
 client.login(token);

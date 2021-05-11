@@ -4,7 +4,7 @@
   "description": "",
   "main": "scrap.js",
   "scripts": {
-    "dev": "node scrap.js"
+    "dev": "node index.js"
   },
   "keywords": [],
   "author": "",
@@ -18,6 +18,7 @@
     "dotenv": "^8.2.0",
     "express": "^4.17.1",
     "moment": "^2.29.1",
-    "request": "^2.88.2"
+    "request": "^2.88.2",
+    "sqlite3": "^5.0.2"
   }
 }
